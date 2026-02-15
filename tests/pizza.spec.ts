@@ -23,3 +23,25 @@ test('purchase with login', async ({ page }) => {
     await page.getByRole('button', { name: 'Pay now' }).click();
     await expect(page.getByRole('heading')).toContainText('Here is your JWT Pizza!');
 });
+
+test('franchise page', async ({ page }) => {
+  await page.goto('/');  
+  await page.getByLabel('Global').getByRole('link', { name: 'Franchise' }).click();
+  await expect(page.getByRole('main')).toContainText('So you want a piece of the pie?');
+});
+
+test('about page', async ({ page }) => {
+  await page.goto('/');  
+  await page.getByRole('link', { name: 'About' }).click();
+  await expect(page.getByRole('main')).toContainText('The secret sauce');
+  await expect(page.getByRole('main')).toContainText('Our employees');
+});
+
+test('history page', async ({ page }) => {
+  await page.goto('/');  
+  await page.getByRole('link', { name: 'History' }).click();
+  await expect(page.getByRole('heading')).toContainText('Mama Rucci, my my');
+});
+
+
+  
