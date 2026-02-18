@@ -27,6 +27,7 @@
     "vite-plugin-istanbul": "^7.2.1"
   },
   "dependencies": {
+    "all": "^0.0.0",
     "playwright": "^1.58.2",
     "preline": "^2.1.0",
     "react": "^18.2.0",
