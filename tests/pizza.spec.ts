@@ -323,3 +323,15 @@ test('history page', async ({ page }) => {
   await page.getByRole('link', { name: 'History' }).click();
   await expect(page.getByRole('heading')).toContainText('Mama Rucci, my my');
 });
+
+test('not found page', async ({ page }) => {
+  await page.goto('/');  
+  await page.goto('/this-is-fake');
+  await expect(page.getByRole('heading')).toContainText('Oops');
+  await expect(page.getByRole('main')).toContainText('It looks like we have dropped a pizza on the floor. Please try another page.');
+});
+
+test('docs page', async ({ page }) => {
+  await page.goto('/docs');  
+  await expect(page.getByRole('heading')).toContainText('JWT Pizza API');
+});
