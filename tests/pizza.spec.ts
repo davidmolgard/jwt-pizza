@@ -1,4 +1,6 @@
 import { test, expect } from 'playwright-test-coverage';
+import { Page} from 'playwright';
+import { Role, User } from '../src/service/pizzaService';
 
 test('home page', async ({ page }) => {
   await page.goto('/');
@@ -44,4 +46,26 @@ test('history page', async ({ page }) => {
 });
 
 
-  
+async function basicInit(page: Page) {
+  let loggedInUser: User | undefined;
+  const validUsers: Record<string, User> = { 'd@jwt.com': { id: '3', name: 'Kai Chen', email: 'd@jwt.com', password: 'a', roles: [{ role: Role.Diner }] } };
+
+  // Authorize login for the given user
+  await page.route('*/**/api/auth', async (route) => {
+    const loginReq = route.request().postDataJSON();
+    const user = validUsers[loginReq.email];
+    if (!user || user.password !== loginReq.password) {
+      await route.fulfill({ status: 401, json: { error: 'Unauthorized' } });
+      return;
+    }
+    loggedInUser = validUsers[loginReq.email];
+    const loginRes = {
+      user: loggedInUser,
+      token: 'abcdef',
+    };
+    expect(route.request().method()).toBe('PUT');
+    await route.fulfill({ json: loginRes });
+  });
+
+  return loggedInUser;
+}
