@@ -10,10 +10,23 @@ test('home page', async ({ page }: { page: Page }) => {
 
 async function basicInit(page: Page) {
   let loggedInUser: User | undefined;
+  let franchises = [
+    {
+      id: '1',
+      name: 'Pietro Pizza',
+      admins: [{ email: 'f@jwt.com', id: '2', name: 'Franchisee User' }],
+      stores: [
+        { id: '10', name: 'Downtown', totalRevenue: 500 },
+        { id: '11', name: 'Mall Location', totalRevenue: 300 },
+      ],
+    },
+  ];
+
   const validUsers: Record<string, User> = {
     'd@jwt.com': { id: '3', name: 'Kai Chen', email: 'd@jwt.com', password: 'a', roles: [{ role: Role.Diner }] },
     'a@jwt.com': { id: '1', name: '常用名字', email: 'a@jwt.com', password: 'admin', roles: [{ role: Role.Admin }] },
     'test@jwt.com': { id: '4', name: 'Test User', email: 'test@jwt.com', password: 'password', roles: [{ role: Role.Diner }] },
+    'f@jwt.com': { id: '2', name: 'Franchisee User', email: 'f@jwt.com', password: 'franchisee', roles: [{ role: Role.Franchisee }] },
   };
 
   // Authorize login for the given user
@@ -78,25 +91,50 @@ async function basicInit(page: Page) {
     await route.fulfill({ json: menuRes });
   });
 
+  await page.route(/\/api\/franchise\/\d+/, async (route) => {
+    const userFranchises = franchises.filter((f) => f.admins?.some((a) => a.email === loggedInUser?.email));
+    await route.fulfill({ json: userFranchises });
+  });
+
   // Standard franchises and stores
   await page.route(/\/api\/franchise(\?.*)?$/, async (route) => {
-    const franchiseRes = {
-      franchises: [
-        {
-          id: 2,
-          name: 'LotaPizza',
-          stores: [
-            { id: 4, name: 'Lehi' },
-            { id: 5, name: 'Springville' },
-            { id: 6, name: 'American Fork' },
-          ],
-        },
-        { id: 3, name: 'PizzaCorp', stores: [{ id: 7, name: 'Spanish Fork' }] },
-        { id: 4, name: 'topSpot', stores: [] },
-      ],
-    };
-    expect(route.request().method()).toBe('GET');
-    await route.fulfill({ json: franchiseRes });
+    const method = route.request().method();
+    if (method === 'GET') {
+      const franchiseRes = {
+        franchises: [
+          {
+            id: 2,
+            name: 'LotaPizza',
+            stores: [
+              { id: 4, name: 'Lehi' },
+              { id: 5, name: 'Springville' },
+              { id: 6, name: 'American Fork' },
+            ],
+          },
+          { id: 3, name: 'PizzaCorp', stores: [{ id: 7, name: 'Spanish Fork' }] },
+          { id: 4, name: 'topSpot', stores: [] },
+        ],
+      };
+      await route.fulfill({ json: franchiseRes });
+    } else if (method === 'POST') {
+      // Create franchise
+      const createReq = route.request().postDataJSON();
+      const newFranchise = {
+        id: '5',
+        name: createReq.name,
+        admins: createReq.admins,
+        stores: [],
+      };
+      franchises.push(newFranchise);
+      await route.fulfill({ json: newFranchise });
+    }
+  });
+
+  // Get user's franchises
+  await page.route('*/**/api/franchise/:userId', async (route) => {
+    const userId = loggedInUser?.id;
+    const userFranchises = franchises.filter((f) => f.admins?.some((a) => a.email === loggedInUser?.email));
+    await route.fulfill({ json: userFranchises });
   });
 
   // Order a pizza.
@@ -233,6 +271,44 @@ test('franchise page', async ({ page }) => {
   await page.goto('/');  
   await page.getByLabel('Global').getByRole('link', { name: 'Franchise' }).click();
   await expect(page.getByRole('main')).toContainText('So you want a piece of the pie?');
+});
+
+test('create franchise', async ({ page }) => {
+  await basicInit(page);
+  
+  // Login as admin
+  await page.getByRole('link', { name: 'Login' }).click();
+  await page.getByRole('textbox', { name: 'Email address' }).fill('a@jwt.com');
+  await page.getByRole('textbox', { name: 'Password' }).fill('admin');
+  await page.getByRole('button', { name: 'Login' }).click();
+  
+  // Navigate to admin dashboard
+  await page.getByLabel('Global').getByRole('link', { name: 'Admin' }).click();
+  
+  // Create franchise
+  await page.getByRole('button', { name: 'Add Franchise' }).click();
+  await page.getByPlaceholder('franchise name').fill('Test Franchise');
+  await page.getByPlaceholder('franchisee admin email').fill('f@jwt.com');
+  await page.getByRole('button', { name: 'Create' }).click();
+
+  // Verify back on admin dashboard
+  await expect(page.getByRole('heading', { name: 'Mama Ricci\'s kitchen' })).toBeVisible();
+});
+
+test('franchisee dashboard', async ({ page }) => {
+  await basicInit(page);
+  
+  // Login as franchisee
+  await page.getByRole('link', { name: 'Login' }).click();
+  await page.getByRole('textbox', { name: 'Email address' }).fill('f@jwt.com');
+  await page.getByRole('textbox', { name: 'Password' }).fill('franchisee');
+  await page.getByRole('button', { name: 'Login' }).click();
+  
+  // Navigate to franchise dashboard
+  await page.getByLabel('Global').getByRole('link', { name: 'Franchise' }).click();
+  
+  // Verify franchise dashboard appears
+  await expect(page.getByRole('main')).toContainText('Everything you need to run an JWT Pizza franchise');
 });
 
 test('about page', async ({ page }) => {
