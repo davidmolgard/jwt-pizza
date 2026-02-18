@@ -10,7 +10,10 @@ test('home page', async ({ page }: { page: Page }) => {
 
 async function basicInit(page: Page) {
   let loggedInUser: User | undefined;
-  const validUsers: Record<string, User> = { 'd@jwt.com': { id: '3', name: 'Kai Chen', email: 'd@jwt.com', password: 'a', roles: [{ role: Role.Diner }] } };
+  const validUsers: Record<string, User> = {
+    'd@jwt.com': { id: '3', name: 'Kai Chen', email: 'd@jwt.com', password: 'a', roles: [{ role: Role.Diner }] },
+    'a@jwt.com': { id: '1', name: '常用名字', email: 'a@jwt.com', password: 'admin', roles: [{ role: Role.Admin }] },
+  };
 
   // Authorize login for the given user
   await page.route('*/**/api/auth', async (route) => {
@@ -118,6 +121,33 @@ test('logout', async ({ page }) => {
   await page.getByRole('link', { name: 'Logout' }).click();
   
   await expect(page.getByRole('link', { name: 'Login' })).toBeVisible();
+});
+
+test('admin login', async ({ page }) => {
+  await basicInit(page);
+  await page.getByRole('link', { name: 'Login' }).click();
+  await page.getByRole('textbox', { name: 'Email address' }).fill('a@jwt.com');
+  await page.getByRole('textbox', { name: 'Password' }).fill('admin');
+  await page.getByRole('button', { name: 'Login' }).click();
+  
+  await expect(page.getByLabel('Global').getByRole('link', { name: 'Admin' })).toBeVisible();
+});
+
+test('admin dashboard', async ({ page }) => {
+  await basicInit(page);
+  
+  // Login as admin
+  await page.getByRole('link', { name: 'Login' }).click();
+  await page.getByRole('textbox', { name: 'Email address' }).fill('a@jwt.com');
+  await page.getByRole('textbox', { name: 'Password' }).fill('admin');
+  await page.getByRole('button', { name: 'Login' }).click();
+  
+  // Navigate to admin dashboard
+  await page.getByLabel('Global').getByRole('link', { name: 'Admin' }).click();
+  
+  // Verify admin dashboard content
+  await expect(page.getByRole('heading', { name: 'Mama Ricci\'s kitchen' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Franchises' })).toBeVisible();
 });
 
 test('purchase with login', async ({ page }) => {
