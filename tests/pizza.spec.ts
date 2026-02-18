@@ -13,29 +13,40 @@ async function basicInit(page: Page) {
   const validUsers: Record<string, User> = {
     'd@jwt.com': { id: '3', name: 'Kai Chen', email: 'd@jwt.com', password: 'a', roles: [{ role: Role.Diner }] },
     'a@jwt.com': { id: '1', name: '常用名字', email: 'a@jwt.com', password: 'admin', roles: [{ role: Role.Admin }] },
+    'test@jwt.com': { id: '4', name: 'Test User', email: 'test@jwt.com', password: 'password', roles: [{ role: Role.Diner }] },
   };
 
   // Authorize login for the given user
   await page.route('*/**/api/auth', async (route) => {
-    if (route.request().method() === 'DELETE') {
+    const method = route.request().method();
+    
+    if (method === 'DELETE') {
       // Logout
       loggedInUser = undefined;
       await route.fulfill({ json: { message: 'logout successful' } });
-    } else {
-      // Login/Register
+    } else if (method === 'POST') {
+      // Register - create new user
+      const registerReq = route.request().postDataJSON();
+      const newUser = {
+        id: '4',
+        name: registerReq.name,
+        email: registerReq.email,
+        password: registerReq.password,
+        roles: [{ role: Role.Diner }],
+      };
+      validUsers[registerReq.email] = newUser;
+      loggedInUser = newUser;
+      await route.fulfill({ json: { user: newUser, token: 'abcdef' } });
+    } else if (method === 'PUT') {
+      // Login
       const loginReq = route.request().postDataJSON();
       const user = validUsers[loginReq.email];
       if (!user || user.password !== loginReq.password) {
         await route.fulfill({ status: 401, json: { error: 'Unauthorized' } });
         return;
       }
-      loggedInUser = validUsers[loginReq.email];
-      const loginRes = {
-        user: loggedInUser,
-        token: 'abcdef',
-      };
-      expect(route.request().method()).toBe('PUT');
-      await route.fulfill({ json: loginRes });
+      loggedInUser = user;
+      await route.fulfill({ json: { user, token: 'abcdef' } });
     }
   });
 
@@ -90,13 +101,32 @@ async function basicInit(page: Page) {
 
   // Order a pizza.
   await page.route('*/**/api/order', async (route) => {
-    const orderReq = route.request().postDataJSON();
-    const orderRes = {
-      order: { ...orderReq, id: 23 },
-      jwt: 'eyJpYXQ',
-    };
-    expect(route.request().method()).toBe('POST');
-    await route.fulfill({ json: orderRes });
+    if (route.request().method() === 'POST') {
+      const orderReq = route.request().postDataJSON();
+      const orderRes = {
+        order: { ...orderReq, id: 23 },
+        jwt: 'eyJpYXQ',
+      };
+      await route.fulfill({ json: orderRes });
+    } else if (route.request().method() === 'GET') {
+      // Get orders
+      const ordersRes = {
+        dinerId: loggedInUser?.id,
+        orders: [
+          {
+            id: '23',
+            franchiseId: '2',
+            storeId: '4',
+            date: '2024-01-01',
+            items: [
+              { menuId: '1', description: 'Veggie', price: 0.0038 },
+              { menuId: '2', description: 'Pepperoni', price: 0.0042 },
+            ],
+          },
+        ],
+      };
+      await route.fulfill({ json: ordersRes });
+    }
   });
 
   await page.goto('/');
@@ -150,6 +180,18 @@ test('admin dashboard', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Franchises' })).toBeVisible();
 });
 
+test('register', async ({ page }) => {
+  await basicInit(page);
+  await page.getByRole('link', { name: 'Register' }).click();
+  await page.getByRole('textbox', { name: 'Full name' }).fill('Test User');
+  await page.getByRole('textbox', { name: 'Email address' }).fill('test@jwt.com');
+  await page.getByRole('textbox', { name: 'Password' }).fill('password');
+  await page.getByRole('button', { name: 'Register' }).click();
+
+  // Verify logged in by checking for the user icon
+  await expect(page.locator('span.inline-flex').first()).toBeVisible();
+});
+
 test('purchase with login', async ({ page }) => {
   await basicInit(page);
 
@@ -180,6 +222,11 @@ test('purchase with login', async ({ page }) => {
 
   // Check balance
   await expect(page.getByText('0.008')).toBeVisible();
+
+  // Navigate to diner dashboard
+  await page.locator('span.inline-flex').first().click();
+  await expect(page.getByRole('heading', { name: 'Your pizza kitchen' })).toBeVisible();
+  await expect(page.getByRole('main')).toContainText('Kai Chen');
 });
 
 test('franchise page', async ({ page }) => {
